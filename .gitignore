@@ -1,0 +1,9 @@
+.env
+data/
+pdfs/
+Documents/
+*.pdf
+backups/
+__pycache__
+node_modules
+.claudeignore
