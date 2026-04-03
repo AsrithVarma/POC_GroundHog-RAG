@@ -128,6 +128,12 @@ Write-Step "Pulling AI models into Ollama (first time: ~2-4 GB download)"
 $ollamaContainer = docker compose ps ollama --format "{{.Name}}" 2>$null
 $ollamaContainer = $ollamaContainer.Trim()
 
+# Temporarily connect Ollama to the internet-facing network for model download
+Write-Host "   Connecting Ollama to external network for download..." -ForegroundColor Gray
+$projectName = ($ollamaContainer -split '_ollama_')[0]
+$extNetwork = "${projectName}_rag_ext"
+docker network connect $extNetwork $ollamaContainer 2>$null
+
 Write-Host "   Pulling nomic-embed-text (embedding model)..." -ForegroundColor Gray
 docker exec $ollamaContainer ollama pull nomic-embed-text
 Write-Ok "nomic-embed-text ready"
@@ -135,6 +141,11 @@ Write-Ok "nomic-embed-text ready"
 Write-Host "   Pulling llama3.2:3b (language model)..." -ForegroundColor Gray
 docker exec $ollamaContainer ollama pull llama3.2:3b
 Write-Ok "llama3.2:3b ready"
+
+# Disconnect from external network to restore air-gap
+Write-Host "   Restoring air-gap (disconnecting Ollama from external network)..." -ForegroundColor Gray
+docker network disconnect $extNetwork $ollamaContainer 2>$null
+Write-Ok "Air-gap restored"
 
 # -------------------------------------------------------
 # Step 5: Start remaining services

@@ -103,6 +103,10 @@ step "Pulling AI models into Ollama (first time: ~2-4 GB download)"
 
 OLLAMA_CONTAINER=$(docker compose ps ollama --format "{{.Name}}" | head -1)
 
+# Temporarily connect Ollama to the internet-facing network for model download
+echo "   Connecting Ollama to external network for download..."
+docker network connect "$(docker compose ps ollama --format "{{.Name}}" | head -1 | sed 's/_ollama_.*//')_rag_ext" "$OLLAMA_CONTAINER" 2>/dev/null || true
+
 echo "   Pulling nomic-embed-text..."
 docker exec "$OLLAMA_CONTAINER" ollama pull nomic-embed-text
 ok "nomic-embed-text ready"
@@ -110,6 +114,11 @@ ok "nomic-embed-text ready"
 echo "   Pulling llama3.2:3b..."
 docker exec "$OLLAMA_CONTAINER" ollama pull llama3.2:3b
 ok "llama3.2:3b ready"
+
+# Disconnect from external network to restore air-gap
+echo "   Restoring air-gap (disconnecting Ollama from external network)..."
+docker network disconnect "$(docker compose ps ollama --format "{{.Name}}" | head -1 | sed 's/_ollama_.*//')_rag_ext" "$OLLAMA_CONTAINER" 2>/dev/null || true
+ok "Air-gap restored"
 
 # -------------------------------------------------------
 # Step 5: Start remaining services
