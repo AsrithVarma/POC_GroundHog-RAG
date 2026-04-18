@@ -105,7 +105,12 @@ OLLAMA_CONTAINER=$(docker compose ps ollama --format "{{.Name}}" | head -1)
 
 # Temporarily connect Ollama to the internet-facing network for model download
 echo "   Connecting Ollama to external network for download..."
-docker network connect "$(docker compose ps ollama --format "{{.Name}}" | head -1 | sed 's/_ollama_.*//')_rag_ext" "$OLLAMA_CONTAINER" 2>/dev/null || true
+PROJECT_NAME=$(docker inspect "$OLLAMA_CONTAINER" --format '{{index .Config.Labels "com.docker.compose.project"}}')
+EXT_NETWORK="${PROJECT_NAME}_rag_ext"
+
+docker network create "$EXT_NETWORK" 2>/dev/null || true
+docker network connect "$EXT_NETWORK" "$OLLAMA_CONTAINER"
+ok "Ollama connected to external network"
 
 echo "   Pulling nomic-embed-text..."
 docker exec "$OLLAMA_CONTAINER" ollama pull nomic-embed-text
@@ -117,7 +122,7 @@ ok "llama3.2:3b ready"
 
 # Disconnect from external network to restore air-gap
 echo "   Restoring air-gap (disconnecting Ollama from external network)..."
-docker network disconnect "$(docker compose ps ollama --format "{{.Name}}" | head -1 | sed 's/_ollama_.*//')_rag_ext" "$OLLAMA_CONTAINER" 2>/dev/null || true
+docker network disconnect "$EXT_NETWORK" "$OLLAMA_CONTAINER"
 ok "Air-gap restored"
 
 # -------------------------------------------------------
