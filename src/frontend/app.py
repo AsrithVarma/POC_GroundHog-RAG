@@ -1,4 +1,5 @@
 import html
+import re
 import time
 
 import httpx
@@ -11,6 +12,41 @@ SESSION_TIMEOUT_MINUTES = 30
 def _esc(text: str) -> str:
     """HTML-escape user-controlled text to prevent XSS."""
     return html.escape(str(text))
+
+
+def _md_to_html(text: str) -> str:
+    """Convert markdown formatting to HTML for display inside styled divs."""
+    text = html.escape(text)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'`(.+?)`', r'<code>\1</code>', text)
+    lines = text.split('\n')
+    result = []
+    in_list = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('### '):
+            if in_list:
+                result.append('</ul>')
+                in_list = False
+            result.append(f'<h4 style="color:#93c5fd;margin:0.75rem 0 0.25rem 0;font-size:0.95rem;">{stripped[4:]}</h4>')
+        elif stripped.startswith('- '):
+            if not in_list:
+                result.append('<ul style="margin:0.25rem 0;padding-left:1.25rem;">')
+                in_list = True
+            result.append(f'<li style="margin:0.2rem 0;">{stripped[2:]}</li>')
+        elif stripped == '':
+            if in_list:
+                result.append('</ul>')
+                in_list = False
+            result.append('<br>')
+        else:
+            if in_list:
+                result.append('</ul>')
+                in_list = False
+            result.append(f'<p style="margin:0.25rem 0;">{stripped}</p>')
+    if in_list:
+        result.append('</ul>')
+    return '\n'.join(result)
 
 
 # --- Custom CSS (Tailwind-inspired) ---
@@ -59,8 +95,18 @@ def inject_styles():
             max-width: 80%;
             border: 1px solid #334155;
             word-wrap: break-word;
-            white-space: pre-wrap;
+            line-height: 1.6;
         }
+        .assistant-msg strong { color: #93c5fd; }
+        .assistant-msg code {
+            background: #0f172a;
+            padding: 0.1rem 0.35rem;
+            border-radius: 0.25rem;
+            font-size: 0.85em;
+            color: #fbbf24;
+        }
+        .assistant-msg ul { list-style-type: disc; }
+        .assistant-msg li { color: #e2e8f0; }
 
         /* Sources expander */
         .source-item {
@@ -316,7 +362,7 @@ def render_chat():
             )
         else:
             st.markdown(
-                f'<div class="assistant-msg">{_esc(msg["content"])}</div>',
+                f'<div class="assistant-msg">{_md_to_html(msg["content"])}</div>',
                 unsafe_allow_html=True,
             )
             if msg.get("sources"):
@@ -355,8 +401,17 @@ def render_chat():
                     sources_text += token
                 else:
                     full_response += token
+                    if '\n' in full_response:
+                        last_nl = full_response.rfind('\n')
+                        completed = full_response[:last_nl]
+                        current_line = full_response[last_nl + 1:]
+                    else:
+                        completed = ""
+                        current_line = full_response
+                    rendered = _md_to_html(completed) if completed else ""
+                    cursor_line = _esc(current_line) + "▍"
                     response_placeholder.markdown(
-                        f'<div class="assistant-msg">{_esc(full_response)}</div>',
+                        f'<div class="assistant-msg">{rendered}<span>{cursor_line}</span></div>',
                         unsafe_allow_html=True,
                     )
 
@@ -374,7 +429,7 @@ def render_chat():
             if len(parts) == 2:
                 full_response = parts[0]
                 response_placeholder.markdown(
-                    f'<div class="assistant-msg">{_esc(full_response)}</div>',
+                    f'<div class="assistant-msg">{_md_to_html(full_response)}</div>',
                     unsafe_allow_html=True,
                 )
                 for line in parts[1].strip().split("\n"):
