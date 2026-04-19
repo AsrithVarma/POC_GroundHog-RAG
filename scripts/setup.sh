@@ -141,13 +141,13 @@ docker network connect "$EXT_NETWORK" "$OLLAMA_CONTAINER" 2>/dev/null || true
 ok "Ollama connected to external network"
 
 echo "   Pulling nomic-embed-text (this may take a few minutes)..."
-timeout 600 docker exec "$OLLAMA_CONTAINER" ollama pull nomic-embed-text || \
-    { warn "nomic-embed-text pull timed out or failed. Retry manually: docker exec $OLLAMA_CONTAINER ollama pull nomic-embed-text"; exit 1; }
+docker exec "$OLLAMA_CONTAINER" ollama pull nomic-embed-text || \
+    { warn "nomic-embed-text pull failed. Check your internet connection and retry manually: docker exec $OLLAMA_CONTAINER ollama pull nomic-embed-text"; exit 1; }
 ok "nomic-embed-text ready"
 
 echo "   Pulling llama3.2:3b (this may take several minutes)..."
-timeout 600 docker exec "$OLLAMA_CONTAINER" ollama pull llama3.2:3b || \
-    { warn "llama3.2:3b pull timed out or failed. Retry manually: docker exec $OLLAMA_CONTAINER ollama pull llama3.2:3b"; exit 1; }
+docker exec "$OLLAMA_CONTAINER" ollama pull llama3.2:3b || \
+    { warn "llama3.2:3b pull failed. Check your internet connection and retry manually: docker exec $OLLAMA_CONTAINER ollama pull llama3.2:3b"; exit 1; }
 ok "llama3.2:3b ready"
 
 # Disconnect from external network to restore air-gap
