@@ -133,11 +133,15 @@ fi
 
 EXT_NETWORK="${PROJECT_NAME}_rag_ext"
 
+# Remove stale network from previous runs (may have missing/wrong labels)
+docker network disconnect "$EXT_NETWORK" "$OLLAMA_CONTAINER" 2>/dev/null || true
+docker network rm "$EXT_NETWORK" 2>/dev/null || true
+
 docker network create \
   --label "com.docker.compose.network=rag_ext" \
   --label "com.docker.compose.project=$PROJECT_NAME" \
-  "$EXT_NETWORK" 2>/dev/null || true
-docker network connect "$EXT_NETWORK" "$OLLAMA_CONTAINER" 2>/dev/null || true
+  "$EXT_NETWORK"
+docker network connect "$EXT_NETWORK" "$OLLAMA_CONTAINER"
 ok "Ollama connected to external network"
 
 echo "   Pulling nomic-embed-text (this may take a few minutes)..."

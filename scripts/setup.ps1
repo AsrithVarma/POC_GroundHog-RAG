@@ -163,8 +163,12 @@ if (-not $projectName -or $projectName -eq "<no value>") {
 
 $extNetwork = "${projectName}_rag_ext"
 
-docker network create --label "com.docker.compose.network=rag_ext" --label "com.docker.compose.project=$projectName" $extNetwork 2>$null
-docker network connect $extNetwork $ollamaContainer 2>$null
+# Remove stale network from previous runs (may have missing/wrong labels)
+docker network disconnect $extNetwork $ollamaContainer 2>$null
+docker network rm $extNetwork 2>$null
+
+docker network create --label "com.docker.compose.network=rag_ext" --label "com.docker.compose.project=$projectName" $extNetwork
+docker network connect $extNetwork $ollamaContainer
 Write-Ok "Ollama connected to external network"
 
 Write-Host "   Pulling nomic-embed-text (this may take a few minutes)..." -ForegroundColor Gray
