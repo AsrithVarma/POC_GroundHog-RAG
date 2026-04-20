@@ -12,6 +12,8 @@ DEFAULT_MODEL = "llama3.2:3b"
 REQUEST_TIMEOUT = 300.0
 TEMPERATURE = 0.1
 
+_client = httpx.Client(timeout=REQUEST_TIMEOUT)
+
 
 def generate(
     prompt: str,
@@ -44,24 +46,23 @@ def generate(
 
     if stream:
         try:
-            with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
-                with client.stream("POST", OLLAMA_GENERATE_URL, json=payload) as response:
-                    response.raise_for_status()
-                    for line in response.iter_lines():
-                        if not line:
-                            continue
-                        try:
-                            chunk = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
+            with _client.stream("POST", OLLAMA_GENERATE_URL, json=payload) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
 
-                        token = chunk.get("response", "")
-                        if token:
-                            token_count += 1
-                            yield token
+                    token = chunk.get("response", "")
+                    if token:
+                        token_count += 1
+                        yield token
 
-                        if chunk.get("done", False):
-                            break
+                    if chunk.get("done", False):
+                        break
 
             elapsed = time.monotonic() - start
             logger.info(
@@ -83,10 +84,9 @@ def generate(
     payload["stream"] = False
 
     try:
-        with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
-            response = client.post(OLLAMA_GENERATE_URL, json=payload)
-            response.raise_for_status()
-            data = response.json()
+        response = _client.post(OLLAMA_GENERATE_URL, json=payload)
+        response.raise_for_status()
+        data = response.json()
 
         elapsed = time.monotonic() - start
         text = data.get("response", "")

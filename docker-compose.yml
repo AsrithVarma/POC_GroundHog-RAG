@@ -5,6 +5,7 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./config/migrations:/migrations:ro
     networks:
       - rag_net
     healthcheck:
@@ -17,6 +18,7 @@ services:
     image: ollama/ollama:latest
     environment:
       - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_KEEP_ALIVE=-1
     volumes:
       - ollama_models:/root/.ollama
     networks:

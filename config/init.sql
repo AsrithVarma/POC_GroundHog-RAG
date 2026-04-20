@@ -34,23 +34,15 @@ CREATE TABLE chunks (
 );
 
 -- HNSW index on chunk embeddings using cosine distance
---
--- HNSW tuning parameters:
---   m              — max connections per node in the graph (default 16).
---                    Higher values improve recall but increase memory usage
---                    and index build time. 16 is a good baseline; increase
---                    to 32–64 for higher recall on large datasets.
---   ef_construction — search width during index build (default 64).
---                    Higher values produce a better-quality graph at the cost
---                    of slower index creation. 128–200 is typical for
---                    production workloads where recall matters.
---
--- At query time, set hnsw.ef_search (default 40) to control the recall/speed
--- tradeoff. Higher values scan more candidates and improve recall but slow
--- down each query. Start with 100 and tune from there.
+-- m=16: max connections per node. ef_construction=200: build-time search width.
+-- At query time the API sets hnsw.ef_search (default 100) for recall tuning.
 CREATE INDEX idx_chunks_embedding ON chunks
     USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 128);
+    WITH (m = 16, ef_construction = 200);
+
+-- B-tree indexes to speed up the JOIN and RBAC filter in retrieval queries
+CREATE INDEX idx_chunks_document_id ON chunks (document_id);
+CREATE INDEX idx_documents_access_group ON documents (access_group);
 
 -- Audit log for tracking all RAG queries and responses
 CREATE TABLE audit_log (

@@ -1,11 +1,14 @@
 import logging
+import os
+import time
 
 from src.api.db import get_connection, put_connection
 from src.api.embedder import embed_query
 
 logger = logging.getLogger(__name__)
 
-MIN_SIMILARITY = 0.3
+MIN_SIMILARITY = float(os.environ.get("MIN_SIMILARITY", "0.3"))
+HNSW_EF_SEARCH = int(os.environ.get("HNSW_EF_SEARCH", "100"))
 
 
 def retrieve(
@@ -16,16 +19,23 @@ def retrieve(
     """Embed a query and return the top-k most similar chunks.
 
     Filters out chunks below MIN_SIMILARITY threshold.
+    Sets hnsw.ef_search for better recall on the HNSW index.
     Results are sorted by similarity (highest first), then grouped
     by document/page for coherence.
     """
+    t0 = time.perf_counter()
     query_embedding = embed_query(query)
-    # pgvector expects format: [1.2,3.4,...] — Python str() on a list produces this
+    embed_ms = (time.perf_counter() - t0) * 1000
+
     embedding_literal = str(query_embedding)
 
     conn = get_connection()
     try:
         with conn.cursor() as cur:
+            # Tune HNSW search: higher ef_search = better recall, slightly slower
+            cur.execute(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}")
+
+            t1 = time.perf_counter()
             cur.execute(
                 """
                 SELECT
@@ -51,8 +61,8 @@ def retrieve(
                     top_k,
                 ),
             )
-
             rows = cur.fetchall()
+            search_ms = (time.perf_counter() - t1) * 1000
     finally:
         conn.rollback()
         put_connection(conn)
@@ -70,15 +80,18 @@ def retrieve(
         for row in rows
     ]
 
-    # Re-sort: group by document then page for coherent context
     results.sort(key=lambda c: (c["source_file"], c["page_number"], c["chunk_index"]))
 
     logger.info(
-        "Retrieved %d chunks for query (top_k=%d, access_group=%s, min_sim=%.2f)",
+        "Retrieved %d chunks (top_k=%d, group=%s, min_sim=%.2f, "
+        "ef_search=%d, embed=%.0fms, search=%.0fms)",
         len(results),
         top_k,
         access_group,
         MIN_SIMILARITY,
+        HNSW_EF_SEARCH,
+        embed_ms,
+        search_ms,
     )
 
     return results
