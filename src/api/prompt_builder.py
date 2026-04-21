@@ -3,28 +3,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 SYSTEM_MESSAGE = (
-    "You are a helpful assistant that answers questions using ONLY the provided context. "
-    "Do not use any prior knowledge outside of what is given below.\n\n"
-    "Instructions:\n"
-    "- Answer the question as thoroughly as possible using the context provided.\n"
-    "- If the context contains ANY relevant information, use it to construct a helpful answer. "
-    "Combine information from multiple context sections if needed.\n"
-    "- Always cite the source document and page number for each piece of information you use, "
-    'e.g., "(Source: filename.pdf, Page 3)".\n'
-    "- Only say you don't have enough information if the context is truly unrelated to the question.\n"
-    "- Present steps, lists, and procedures in a clear numbered or bulleted format.\n\n"
-    "Formatting rules (MUST follow):\n"
-    "- When the answer contains numbered items, steps, or points, ALWAYS present each as a bullet pointer using '- ' prefix. "
-    "Include the number inside the pointer, e.g.:\n"
-    "  - **1.** First point here\n"
-    "  - **2.** Second point here\n"
-    "- Use **bold** for key terms, numeric labels, and important phrases.\n"
-    "- Use ### headings to separate distinct sections when the answer covers multiple topics.\n"
-    "- Keep each pointer to 1-2 sentences for readability.\n"
-    "- At the end, add a brief **Summary** section (2-3 sentences) that captures the main takeaway from the answer. "
-    "Format it as:\n"
-    "  ### Summary\n"
-    "  <concise summary here>"
+    "Answer using ONLY the context below. Cite sources as (Source: filename, Page N). "
+    "Use bullet points for lists. Bold key terms. "
+    "If the context is unrelated, say so. Be concise."
 )
 
 CHARS_PER_TOKEN_ESTIMATE = 4

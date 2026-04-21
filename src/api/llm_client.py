@@ -10,9 +10,11 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
 OLLAMA_GENERATE_URL = f"{OLLAMA_HOST}/api/generate"
-DEFAULT_MODEL = "llama3.2:3b"
+DEFAULT_MODEL = os.environ.get("LLM_MODEL", "llama3.2:3b")
 REQUEST_TIMEOUT = 300.0
 TEMPERATURE = 0.1
+MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "512"))
+NUM_CTX = int(os.environ.get("LLM_NUM_CTX", "2048"))
 
 _client = httpx.Client(timeout=REQUEST_TIMEOUT)
 
@@ -40,6 +42,8 @@ def generate(
         "stream": stream,
         "options": {
             "temperature": TEMPERATURE,
+            "num_predict": MAX_TOKENS,
+            "num_ctx": NUM_CTX,
         },
     }
 
