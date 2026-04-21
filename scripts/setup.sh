@@ -69,7 +69,7 @@ POSTGRES_USER=raguser
 POSTGRES_DB=ragdb
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
-OLLAMA_HOST=http://ollama:11434
+OLLAMA_HOST=http://host.docker.internal:11434
 JWT_SECRET=$JWT_SECRET
 ENCRYPTION_KEY=$ENC_KEY
 DATA_PATH=$DATA_PATH
@@ -79,24 +79,67 @@ EOF
 fi
 
 # -------------------------------------------------------
-# Step 3: Build and start services
+# Step 3: Install and start Ollama natively (GPU access)
+# -------------------------------------------------------
+step "Setting up Ollama (native install for GPU acceleration)"
+
+if command -v ollama >/dev/null 2>&1; then
+    ok "Ollama already installed"
+else
+    echo "   Installing Ollama..."
+    if [[ "$(uname)" == "Darwin" ]]; then
+        if command -v brew >/dev/null 2>&1; then
+            brew install ollama
+        else
+            curl -fsSL https://ollama.com/install.sh | sh
+        fi
+    else
+        curl -fsSL https://ollama.com/install.sh | sh
+    fi
+    ok "Ollama installed"
+fi
+
+# Start Ollama if not already running
+if ! curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+    echo "   Starting Ollama server..."
+    ollama serve &>/dev/null &
+    sleep 3
+fi
+ok "Ollama is running"
+
+# -------------------------------------------------------
+# Step 4: Pull LLM models
+# -------------------------------------------------------
+step "Pulling AI models (first time: ~2-4 GB download)"
+
+echo "   Pulling nomic-embed-text (this may take a few minutes)..."
+ollama pull nomic-embed-text || \
+    { warn "nomic-embed-text pull failed. Check your internet connection and retry: ollama pull nomic-embed-text"; exit 1; }
+ok "nomic-embed-text ready"
+
+echo "   Pulling llama3.2:3b (this may take several minutes)..."
+ollama pull llama3.2:3b || \
+    { warn "llama3.2:3b pull failed. Check your internet connection and retry: ollama pull llama3.2:3b"; exit 1; }
+ok "llama3.2:3b ready"
+
+# -------------------------------------------------------
+# Step 5: Build and start Docker services
 # -------------------------------------------------------
 step "Building and starting containers (this may take several minutes on first run)"
 
 docker compose build
 ok "Images built"
 
-docker compose up -d postgres ollama
-ok "Database and Ollama starting"
+docker compose up -d postgres
+ok "Database starting"
 
-echo "   Waiting for services to become healthy..."
+echo "   Waiting for PostgreSQL to become healthy..."
 TIMEOUT=120
 ELAPSED=0
 while [ $ELAPSED -lt $TIMEOUT ]; do
     PG=$(docker compose ps postgres --format "{{.Health}}" 2>/dev/null || echo "")
-    OL=$(docker compose ps ollama --format "{{.Health}}" 2>/dev/null || echo "")
 
-    if [ -n "$PG" ] && echo "$PG" | grep -q "healthy" && [ -n "$OL" ] && echo "$OL" | grep -q "healthy"; then
+    if [ -n "$PG" ] && echo "$PG" | grep -q "healthy"; then
         break
     fi
     sleep 5
@@ -105,62 +148,13 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
 done
 
 if [ $ELAPSED -ge $TIMEOUT ]; then
-    warn "Services did not become healthy within ${TIMEOUT}s. Continuing..."
+    warn "PostgreSQL did not become healthy within ${TIMEOUT}s. Continuing..."
 else
-    ok "PostgreSQL and Ollama are healthy"
+    ok "PostgreSQL is healthy"
 fi
 
 # -------------------------------------------------------
-# Step 4: Pull LLM models
-# -------------------------------------------------------
-step "Pulling AI models into Ollama (first time: ~2-4 GB download)"
-
-OLLAMA_CONTAINER=$(docker compose ps ollama --format "{{.Name}}" | head -1)
-
-if [ -z "$OLLAMA_CONTAINER" ]; then
-    echo "ERROR: Ollama container not found. Check 'docker compose ps' output."
-    exit 1
-fi
-
-# Temporarily connect Ollama to the internet-facing network for model download
-echo "   Connecting Ollama to external network for download..."
-PROJECT_NAME=$(docker inspect "$OLLAMA_CONTAINER" --format '{{index .Config.Labels "com.docker.compose.project"}}')
-
-if [ -z "$PROJECT_NAME" ] || [ "$PROJECT_NAME" = "<no value>" ]; then
-    echo "ERROR: Could not determine Docker Compose project name from container labels."
-    exit 1
-fi
-
-EXT_NETWORK="${PROJECT_NAME}_rag_ext"
-
-# Remove stale network from previous runs (may have missing/wrong labels)
-docker network disconnect "$EXT_NETWORK" "$OLLAMA_CONTAINER" 2>/dev/null || true
-docker network rm "$EXT_NETWORK" 2>/dev/null || true
-
-docker network create \
-  --label "com.docker.compose.network=rag_ext" \
-  --label "com.docker.compose.project=$PROJECT_NAME" \
-  "$EXT_NETWORK"
-docker network connect "$EXT_NETWORK" "$OLLAMA_CONTAINER"
-ok "Ollama connected to external network"
-
-echo "   Pulling nomic-embed-text (this may take a few minutes)..."
-docker exec "$OLLAMA_CONTAINER" ollama pull nomic-embed-text || \
-    { warn "nomic-embed-text pull failed. Check your internet connection and retry manually: docker exec $OLLAMA_CONTAINER ollama pull nomic-embed-text"; exit 1; }
-ok "nomic-embed-text ready"
-
-echo "   Pulling llama3.2:3b (this may take several minutes)..."
-docker exec "$OLLAMA_CONTAINER" ollama pull llama3.2:3b || \
-    { warn "llama3.2:3b pull failed. Check your internet connection and retry manually: docker exec $OLLAMA_CONTAINER ollama pull llama3.2:3b"; exit 1; }
-ok "llama3.2:3b ready"
-
-# Disconnect from external network to restore air-gap
-echo "   Restoring air-gap (disconnecting Ollama from external network)..."
-docker network disconnect "$EXT_NETWORK" "$OLLAMA_CONTAINER" 2>/dev/null || true
-ok "Air-gap restored"
-
-# -------------------------------------------------------
-# Step 5: Start remaining services
+# Step 6: Start remaining services
 # -------------------------------------------------------
 step "Starting API and frontend"
 

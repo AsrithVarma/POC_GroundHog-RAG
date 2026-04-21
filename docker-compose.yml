@@ -16,6 +16,7 @@ services:
 
   ollama:
     image: ollama/ollama:latest
+    profiles: ["docker-ollama"]
     environment:
       - OLLAMA_NUM_PARALLEL=1
       - OLLAMA_KEEP_ALIVE=-1
@@ -37,12 +38,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ${DATA_PATH}:/data/pdfs:ro
     networks:
       - rag_net
+      - rag_ext
     env_file: .env
 
   api:
@@ -52,8 +54,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:8000:8000"
     networks:
@@ -79,6 +81,5 @@ volumes:
 networks:
   rag_net:
     driver: bridge
-    internal: true
   rag_ext:
     driver: bridge

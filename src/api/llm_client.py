@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 from collections.abc import Generator
 
@@ -7,7 +8,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_GENERATE_URL = "http://ollama:11434/api/generate"
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
+OLLAMA_GENERATE_URL = f"{OLLAMA_HOST}/api/generate"
 DEFAULT_MODEL = "llama3.2:3b"
 REQUEST_TIMEOUT = 300.0
 TEMPERATURE = 0.1

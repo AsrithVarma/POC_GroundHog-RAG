@@ -93,7 +93,7 @@ POSTGRES_USER=raguser
 POSTGRES_DB=ragdb
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
-OLLAMA_HOST=http://ollama:11434
+OLLAMA_HOST=http://host.docker.internal:11434
 JWT_SECRET=$jwtSecret
 ENCRYPTION_KEY=$encKey
 DATA_PATH=$dockerDataPath
@@ -104,7 +104,54 @@ DATA_PATH=$dockerDataPath
 }
 
 # -------------------------------------------------------
-# Step 3: Build and start services
+# Step 3: Install and start Ollama natively (GPU access)
+# -------------------------------------------------------
+Write-Step "Setting up Ollama (native install for GPU acceleration)"
+
+$ollamaCmd = Get-Command ollama -ErrorAction SilentlyContinue
+if ($ollamaCmd) {
+    Write-Ok "Ollama already installed"
+} else {
+    Write-Host "   Installing Ollama..." -ForegroundColor Gray
+    Write-Host "   Download and install from: https://ollama.com/download/windows" -ForegroundColor Yellow
+    Write-Host "   After installing, re-run this script." -ForegroundColor Yellow
+    exit 1
+}
+
+# Start Ollama if not already running
+try {
+    $null = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -TimeoutSec 3
+    Write-Ok "Ollama is running"
+} catch {
+    Write-Host "   Starting Ollama server..." -ForegroundColor Gray
+    Start-Process ollama -ArgumentList "serve" -WindowStyle Hidden
+    Start-Sleep -Seconds 3
+    Write-Ok "Ollama started"
+}
+
+# -------------------------------------------------------
+# Step 4: Pull the LLM models
+# -------------------------------------------------------
+Write-Step "Pulling AI models (first time: ~2-4 GB download)"
+
+Write-Host "   Pulling nomic-embed-text (this may take a few minutes)..." -ForegroundColor Gray
+ollama pull nomic-embed-text
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "nomic-embed-text pull failed. Check your internet connection and retry: ollama pull nomic-embed-text"
+    exit 1
+}
+Write-Ok "nomic-embed-text ready"
+
+Write-Host "   Pulling llama3.2:3b (this may take several minutes)..." -ForegroundColor Gray
+ollama pull llama3.2:3b
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "llama3.2:3b pull failed. Check your internet connection and retry: ollama pull llama3.2:3b"
+    exit 1
+}
+Write-Ok "llama3.2:3b ready"
+
+# -------------------------------------------------------
+# Step 5: Build and start Docker services
 # -------------------------------------------------------
 Write-Step "Building and starting containers (this may take several minutes on first run)"
 
@@ -115,17 +162,16 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Ok "Images built"
 
-docker compose up -d postgres ollama
-Write-Ok "Database and Ollama starting"
+docker compose up -d postgres
+Write-Ok "Database starting"
 
-Write-Host "   Waiting for services to become healthy..." -ForegroundColor Gray
+Write-Host "   Waiting for PostgreSQL to become healthy..." -ForegroundColor Gray
 $timeout = 120
 $elapsed = 0
 while ($elapsed -lt $timeout) {
     $pgHealth = docker compose ps postgres --format "{{.Health}}" 2>$null
-    $olHealth = docker compose ps ollama --format "{{.Health}}" 2>$null
 
-    if ($pgHealth -and $pgHealth -match "healthy" -and $olHealth -and $olHealth -match "healthy") {
+    if ($pgHealth -and $pgHealth -match "healthy") {
         break
     }
     Start-Sleep -Seconds 5
@@ -134,66 +180,13 @@ while ($elapsed -lt $timeout) {
 }
 
 if ($elapsed -ge $timeout) {
-    Write-Warn "Services did not become healthy within ${timeout}s. Continuing anyway..."
+    Write-Warn "PostgreSQL did not become healthy within ${timeout}s. Continuing anyway..."
 } else {
-    Write-Ok "PostgreSQL and Ollama are healthy"
+    Write-Ok "PostgreSQL is healthy"
 }
 
 # -------------------------------------------------------
-# Step 4: Pull the LLM models into Ollama
-# -------------------------------------------------------
-Write-Step "Pulling AI models into Ollama (first time: ~2-4 GB download)"
-
-$ollamaContainer = docker compose ps ollama --format "{{.Name}}" 2>$null
-if ($ollamaContainer) { $ollamaContainer = $ollamaContainer.Trim() }
-
-if (-not $ollamaContainer) {
-    Write-Error "Ollama container not found. Check 'docker compose ps' output."
-    exit 1
-}
-
-# Temporarily connect Ollama to the internet-facing network for model download
-Write-Host "   Connecting Ollama to external network for download..." -ForegroundColor Gray
-$projectName = (docker inspect $ollamaContainer --format '{{index .Config.Labels "com.docker.compose.project"}}').Trim()
-
-if (-not $projectName -or $projectName -eq "<no value>") {
-    Write-Error "Could not determine Docker Compose project name from container labels."
-    exit 1
-}
-
-$extNetwork = "${projectName}_rag_ext"
-
-# Remove stale network from previous runs (may have missing/wrong labels)
-docker network disconnect $extNetwork $ollamaContainer 2>$null
-docker network rm $extNetwork 2>$null
-
-docker network create --label "com.docker.compose.network=rag_ext" --label "com.docker.compose.project=$projectName" $extNetwork
-docker network connect $extNetwork $ollamaContainer
-Write-Ok "Ollama connected to external network"
-
-Write-Host "   Pulling nomic-embed-text (this may take a few minutes)..." -ForegroundColor Gray
-docker exec $ollamaContainer ollama pull nomic-embed-text
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "nomic-embed-text pull failed. Check your internet connection and retry."
-    exit 1
-}
-Write-Ok "nomic-embed-text ready"
-
-Write-Host "   Pulling llama3.2:3b (this may take several minutes)..." -ForegroundColor Gray
-docker exec $ollamaContainer ollama pull llama3.2:3b
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "llama3.2:3b pull failed. Check your internet connection and retry."
-    exit 1
-}
-Write-Ok "llama3.2:3b ready"
-
-# Disconnect from external network to restore air-gap
-Write-Host "   Restoring air-gap (disconnecting Ollama from external network)..." -ForegroundColor Gray
-docker network disconnect $extNetwork $ollamaContainer 2>$null
-Write-Ok "Air-gap restored"
-
-# -------------------------------------------------------
-# Step 5: Start remaining services
+# Step 6: Start remaining services
 # -------------------------------------------------------
 Write-Step "Starting API and frontend"
 

@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 import httpx
@@ -9,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 _start_time = time.monotonic()
 
-OLLAMA_URL = "http://ollama:11434/api/tags"
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
+OLLAMA_URL = f"{OLLAMA_HOST}/api/tags"
 
 
 def check_health() -> dict:
