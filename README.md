@@ -7,7 +7,7 @@ A fully self-hosted RAG (Retrieval-Augmented Generation) system. Ask questions a
 | Requirement | macOS | Windows |
 |---|---|---|
 | **Docker Desktop** | [Download for Mac](https://www.docker.com/products/docker-desktop/) | [Download for Windows](https://www.docker.com/products/docker-desktop/) |
-| **Ollama** | `brew install ollama` | [Download for Windows](https://ollama.com/download/windows) |
+| **Ollama** | `curl -fsSL https://ollama.com/install.sh \| sh` | [Download for Windows](https://ollama.com/download/windows) |
 | **RAM** | 8 GB+ (16 GB recommended) | 8 GB+ |
 | **Disk space** | 10 GB for images and models | 10 GB for images and models |
 | **Git** | Pre-installed (or `xcode-select --install`) | [Download Git](https://git-scm.com/download/win) |
@@ -19,11 +19,8 @@ Apple Silicon Macs get **GPU-accelerated inference** because Ollama runs nativel
 ### Step 1: Install prerequisites
 
 ```bash
-# Install Homebrew if you don't have it
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
 # Install Ollama
-brew install ollama
+curl -fsSL https://ollama.com/install.sh | sh
 ```
 
 Open **Docker Desktop** and go to **Settings > Resources** — set memory to **8 GB or higher**.
